@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Bug Checker</title>
+</head>
+
+<body style="font-family: Arial; max-width:600px; margin:auto;">
+
+<h2>Bug Duplicate Checker</h2>
+
+<input id="title" placeholder="Enter Bug Title" style="width:100%;padding:8px">
+<br><br>
+
+<button onclick="checkBug()">Check Duplicate</button>
+
+<div id="output" style="margin-top:20px;"></div>
+
+<script>
+async function checkBug() {
+  const title = document.getElementById("title").value;
+
+  document.getElementById("output").innerHTML = "Checking...";
+
+  try {
+    const res = await fetch("/check-bug", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ title })
+    });
+
+    const data = await res.json();
+
+    let html = "<h3>Results:</h3>";
+
+    data.suggestions.forEach(s => {
+      html += `<p>${s.summary} (${s.similarity}%)</p>`;
+    });
+
+    document.getElementById("output").innerHTML = html;
+
+  } catch (err) {
+    document.getElementById("output").innerHTML = "Error connecting to server";
+  }
+}
+</script>
+
+</body>
+</html>
