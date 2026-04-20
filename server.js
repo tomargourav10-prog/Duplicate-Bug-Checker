@@ -4,7 +4,7 @@ const app = express();
 app.use(express.json());
 
 /* ===============================
-   DUMMY DATA
+   DUMMY DATA (simulate Jira bugs)
 ================================ */
 const existingBugs = [
   "signup button not displaying",
@@ -15,11 +15,47 @@ const existingBugs = [
 ];
 
 /* ===============================
+   SYNONYMS (SMART MATCHING)
+================================ */
+const synonyms = {
+  button: ["icon", "btn"],
+  icon: ["button", "btn"],
+  click: ["press"],
+  clickable: ["working"],
+  working: ["clickable", "functioning"],
+  visible: ["displaying", "showing"],
+  displaying: ["visible", "showing"],
+  error: ["issue", "bug"],
+  crash: ["fail", "break"],
+  loading: ["opening"],
+  page: ["screen"]
+};
+
+/* ===============================
+   NORMALIZE TEXT
+================================ */
+function normalize(text) {
+  return text
+    .toLowerCase()
+    .split(" ")
+    .map(word => {
+      for (let key in synonyms) {
+        if (key === word || synonyms[key].includes(word)) {
+          return key;
+        }
+      }
+      return word;
+    })
+    .join(" ");
+}
+
+/* ===============================
    SIMILARITY FUNCTION
 ================================ */
 function similarity(a, b) {
-  const w1 = a.toLowerCase().split(" ");
-  const w2 = b.toLowerCase().split(" ");
+  const w1 = a.split(" ");
+  const w2 = b.split(" ");
+
   const match = w1.filter(x => w2.includes(x));
   return Math.round((match.length / Math.max(w1.length, w2.length)) * 100);
 }
@@ -34,20 +70,18 @@ app.post("/check-bug", (req, res) => {
     return res.status(400).json({ error: "Title required" });
   }
 
-  const results = existingBugs.map(bug => ({
-    summary: bug,
-    similarity: similarity(title, bug)
-  })).sort((a, b) => b.similarity - a.similarity);
+  const normalizedInput = normalize(title);
 
-  if (results[0].similarity > 60) {
-    return res.json({
-      duplicate: true,
-      suggestions: results.slice(0, 3)
-    });
-  }
+  const results = existingBugs.map(bug => {
+    const normalizedBug = normalize(bug);
+    return {
+      summary: bug,
+      similarity: similarity(normalizedInput, normalizedBug)
+    };
+  }).sort((a, b) => b.similarity - a.similarity);
 
   res.json({
-    duplicate: false,
+    duplicate: results[0].similarity > 60,
     suggestions: results.slice(0, 3)
   });
 });
@@ -62,7 +96,7 @@ app.get("/", (req, res) => {
 
   <div style="max-width:650px;margin:auto;background:white;padding:25px;border-radius:12px;box-shadow:0 0 10px #ccc;">
     
-    <h2 style="text-align:center;">🚀 Smart Bug Checker</h2>
+    <h2 style="text-align:center;">🚀 Smart Jira Bug Checker</h2>
 
     <input id="title" placeholder="Enter Bug Title"
       style="width:100%;padding:12px;border-radius:8px;border:1px solid #ccc;">
@@ -92,37 +126,46 @@ async function check(){
   const data = await res.json();
 
   let html = "";
+  const topMatch = data.suggestions[0]?.similarity || 0;
 
-  if(data.duplicate){
-    html += "<p style='color:red;'>❌ Duplicate Found</p>";
-  } else {
-    html += "<p style='color:green;'>✅ No Duplicate Found</p>";
+  // ❌ STRICT DUPLICATE BLOCK
+  if(topMatch > 60){
+    html += "<p style='color:red;font-weight:bold;'>❌ Duplicate Bug Detected</p>";
+    html += "<p>Bug creation is blocked to avoid duplication.</p>";
   }
 
-  html += "<h4>Suggestions:</h4>";
+  // ⚠️ SIMILAR WARNING
+  else if(topMatch >= 40){
+    html += "<p style='color:orange;font-weight:bold;'>⚠️ Similar Bug Found</p>";
+    html += "<button onclick='createBug()' style='padding:10px;background:orange;color:white;border:none;border-radius:6px;'>Create Anyway</button>";
+  }
+
+  // ✅ SAFE
+  else{
+    html += "<p style='color:green;font-weight:bold;'>✅ No Duplicate Found</p>";
+    html += "<button onclick='createBug()' style='padding:10px;background:green;color:white;border:none;border-radius:6px;'>Create Bug</button>";
+  }
+
+  html += "<h4>Similar Issues:</h4>";
 
   data.suggestions.forEach(s => {
     html += "<p>• " + s.summary + " (" + s.similarity + "%)</p>";
   });
 
-  if(!data.duplicate){
-    html += "<br><button onclick='createBug()' style='padding:10px;background:green;color:white;border:none;border-radius:6px;'>Create Bug</button>";
-  }
-
   document.getElementById("out").innerHTML = html;
 }
 
 /* ===============================
-   CREATE BUG (FINAL FIX)
+   CREATE BUG (JIRA)
 ================================ */
 function createBug(){
   const title = document.getElementById("title").value;
 
   const jiraUrl = "https://tomargourav10.atlassian.net";
 
-  // ✅ UPDATE THESE VALUES
-  const projectId = "10001";     // My AI Team project ID
-  const issueTypeId = "10042";   // Bug ID
+  // ⚠️ UPDATE THESE FROM YOUR JIRA
+  const projectId = "10001";
+  const issueTypeId = "10042"; // BUG ID
 
   const description = \`
 Steps to Reproduce:
@@ -161,5 +204,5 @@ OS: Windows
    START SERVER
 ================================ */
 app.listen(3000, () => {
-  console.log("🚀 http://localhost:3000");
+  console.log("🚀 Server running at http://localhost:3000");
 });
